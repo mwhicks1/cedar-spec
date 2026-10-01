@@ -27,6 +27,10 @@ package Cedar
 @[default_target]
 lean_lib Cedar where
   defaultFacets := #[LeanLib.staticFacet]
+  -- SanitizerCoverage for Basalt's `basalt-fuzz`: only a C -> object flag, so it costs nothing
+  -- unless an executable links Cedar, and it is what gives libFuzzer coverage of Cedar's evaluator
+  -- and typechecker.
+  moreLeancArgs := #["-O1", "-fsanitize=fuzzer-no-link"]
 
 @[default_target]
 lean_lib SymCC where
