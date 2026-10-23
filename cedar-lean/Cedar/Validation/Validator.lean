@@ -17,6 +17,7 @@
 module
 
 public import Cedar.Validation.Typechecker
+public import Cedar.Mutant
 import Cedar.Validation.Levels
 
 /-! This file defines the Cedar validator. -/
@@ -219,7 +220,7 @@ public def allFalse (txs : List TypedExpr) : Bool :=
 /-- Check a policy under multiple environments. -/
 public def typecheckPolicyWithEnvironments (tc : Policy → TypeEnv → Except ValidationError TypedExpr) (policy : Policy) (schema : Schema) : ValidationResult := do
   (checkEntities schema policy.toExpr).mapError (.typeError policy.id)
-  let policyTypes ← schema.environments.mapM (tc policy)
+  let policyTypes ← (if mutant 36 then schema.environments.take 1 else schema.environments).mapM (tc policy)
   if allFalse policyTypes then .error (.impossiblePolicy policy.id) else .ok ()
 
 /--

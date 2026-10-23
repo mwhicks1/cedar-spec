@@ -20,6 +20,7 @@ public import Cedar.Validation.TypedExpr
 import Cedar.Validation.Typechecker
 import Cedar.Thm.Data.Map
 public import Cedar.Spec.Policy
+public import Cedar.Mutant
 
 /-!
 This file defines a level checking of a type-annotated AST. Level checking
@@ -158,7 +159,7 @@ public def TypedExpr.checkLevel (tx : TypedExpr) (env : TypeEnv) (n : Nat) : Boo
   | .binaryApp .mem x₁ x₂ _
   | .binaryApp .getTag x₁ x₂ _
   | .binaryApp .hasTag x₁ x₂ _ =>
-    n > 0 &&
+    (n > 0 || mutant 30) &&
     x₁.checkEntityAccessLevel env (n - 1) n [] &&
     x₂.checkLevel env n
   | .and x₁ x₂ _
@@ -170,7 +171,7 @@ public def TypedExpr.checkLevel (tx : TypedExpr) (env : TypeEnv) (n : Nat) : Boo
   | .getAttr x₁ _ _ =>
     match x₁.typeOf with
     | .entity _ =>
-      n > 0 &&
+      (n > 0 || mutant 31) &&
       x₁.checkEntityAccessLevel env (n - 1) n []
     | _ => x₁.checkLevel env n
   | .extHasAttr x₁ attr attrs _ =>

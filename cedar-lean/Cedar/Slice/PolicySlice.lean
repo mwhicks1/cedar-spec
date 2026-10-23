@@ -15,6 +15,7 @@
 -/
 
 import Cedar.Spec
+import Cedar.Mutant
 
 /-!
 This file defines a simple policy slicing algorithm that is based
@@ -34,7 +35,7 @@ structure PolicyBound where
 
 def inSomeOrNone (uid : EntityUID) (opt : Option EntityUID) (entities : Entities) : Bool :=
   match opt with
-  | .some uid' => inₑ uid uid' entities
+  | .some uid' => if mutant 35 then uid == uid' else inₑ uid uid' entities
   | .none      => true
 
 /--

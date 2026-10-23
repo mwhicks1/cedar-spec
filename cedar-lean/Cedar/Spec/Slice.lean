@@ -19,6 +19,7 @@ module
 import Cedar.Spec.Value
 public import Cedar.Spec.Entities
 public import Cedar.Spec.Request
+public import Cedar.Mutant
 import Cedar.Data.SizeOf
 
 /-!
@@ -39,7 +40,7 @@ public def EntityData.sliceEUIDs (ed : EntityData) : Set EntityUID :=
   ed.tags.values.mapUnion Value.sliceEUIDs
 
 public def Request.sliceEUIDs (r : Request) : Set EntityUID :=
-  Set.make [r.principal, r.action, r.resource] ∪
+  Set.make (if mutant 32 then [r.principal, r.action] else [r.principal, r.action, r.resource]) ∪
   (Value.record r.context).sliceEUIDs
 
 @[expose]

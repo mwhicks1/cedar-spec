@@ -18,6 +18,7 @@ module
 
 public import Cedar.Spec.Evaluator
 public import Cedar.Spec.Response
+public import Cedar.Mutant
 
 /-! This file defines the Cedar authorizer. -/
 
@@ -39,6 +40,7 @@ public def satisfiedPolicies (effect : Effect) (policies : Policies) (req : Requ
 
 public def hasError (policy : Policy) (req : Request) (entities : Entities) : Bool :=
   match (evaluate policy.toExpr req entities) with
+  | .ok (.prim (.bool false)) => mutant 34
   | .ok _ => false
   | .error _ => true
 
@@ -57,7 +59,7 @@ public def isAuthorized (req : Request) (entities : Entities) (policies : Polici
   let forbids := satisfiedPolicies .forbid policies req entities
   let permits := satisfiedPolicies .permit policies req entities
   let erroringPolicies := errorPolicies policies req entities
-  if forbids.isEmpty && !permits.isEmpty
+  if (forbids.isEmpty || mutant 33) && !permits.isEmpty
   then { decision := .allow, determiningPolicies := permits, erroringPolicies }
   else { decision := .deny,  determiningPolicies := forbids, erroringPolicies }
 
