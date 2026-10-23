@@ -19,6 +19,7 @@ module
 public import Cedar.Validation.Types
 public import Cedar.Validation.TypedExpr
 public import Cedar.Validation.Subtyping
+public import Cedar.Mutant
 
 namespace Cedar.Validation
 
@@ -86,7 +87,7 @@ public def typeOfIf (r₁ : TypedExpr × Capabilities) (r₂ r₃ : ResultType) 
     let (ty₂, c₂) ← r₂
     let (ty₃, c₃) ← r₃
     match ty₂.typeOf ⊔ ty₃.typeOf with
-    | .some ty => ok (.ite r₁.fst ty₂ ty₃ ty) ((c₁ ∪ c₂) ∩ c₃)
+    | .some ty => ok (.ite r₁.fst ty₂ ty₃ ty) (if mutant 3 then c₁ ∪ c₂ else (c₁ ∪ c₂) ∩ c₃)
     | .none    => err (.lubErr ty₂.typeOf ty₃.typeOf)
   | ty₁ => err (.unexpectedType ty₁)
 
@@ -99,7 +100,7 @@ public def typeOfAnd (r₁ : TypedExpr × Capabilities) (r₂ : ResultType) : Re
     let ok ty (c := ∅) := ok (TypedExpr.and r₁.fst ty₂ ty) c
     match ty₂.typeOf with
     | .bool .ff     => ok (.bool .ff)
-    | .bool .tt     => ok (.bool ty₁) (c₁ ∪ c₂)
+    | .bool .tt     => ok (.bool (if mutant 1 then .tt else ty₁)) (c₁ ∪ c₂)
     | .bool _       => ok (.bool .anyBool) (c₁ ∪ c₂)
     | _             => err (.unexpectedType ty₂.typeOf)
   | ty₁        => err (.unexpectedType ty₁)
@@ -120,14 +121,14 @@ public def typeOfOr (r₁ : TypedExpr × Capabilities) (r₂ : ResultType) : Res
     match ty₂.typeOf with
     | .bool .tt     => ok (.bool .tt)
     | .bool .ff     => ok (.bool .anyBool) c₁
-    | .bool _       => ok (.bool .anyBool) (c₁ ∩ c₂)
+    | .bool _       => ok (.bool .anyBool) (if mutant 2 then c₁ ∪ c₂ else c₁ ∩ c₂)
     | _             => err (.unexpectedType ty₂.typeOf)
   | ty₁        => err (.unexpectedType ty₁)
 
 public def typeOfUnaryApp (op : UnaryOp) (ty : TypedExpr) : ResultType :=
   let ok := ok ∘ TypedExpr.unaryApp op ty
   match op, ty.typeOf with
-  | .not, .bool x          => ok (.bool x.not)
+  | .not, .bool x          => ok (.bool (if mutant 4 then x else x.not))
   | .neg, .int             => ok .int
   | .isEmpty, .set _       => ok (.bool .anyBool)
   | .like _, .string       => ok (.bool .anyBool)
@@ -137,7 +138,7 @@ public def typeOfUnaryApp (op : UnaryOp) (ty : TypedExpr) : ResultType :=
 public def typeOfEq (ty₁ ty₂ : TypedExpr) (x₁ x₂ : Expr) : ResultType :=
   let ok := ok ∘ TypedExpr.binaryApp .eq ty₁ ty₂
   match x₁, x₂ with
-  | .lit p₁, .lit p₂ => if p₁ == p₂ then ok (.bool .tt) else ok (.bool .ff)
+  | .lit p₁, .lit p₂ => if p₁ == p₂ || mutant 5 then ok (.bool .tt) else ok (.bool .ff)
   | _, _ =>
     match ty₁.typeOf ⊔ ty₂.typeOf with
     | .some _ => ok (.bool .anyBool)
@@ -166,7 +167,7 @@ public def typeOfInₑ (ety₁ ety₂ : EntityType) (x₁ x₂ : Expr) (env : Ty
     then .tt
     else .ff
   | _, _ =>
-    if env.descendentOf ety₁ ety₂
+    if (if mutant 6 then ety₁ == ety₂ else env.descendentOf ety₁ ety₂)
     then .anyBool
     else .ff
 
@@ -174,7 +175,7 @@ public def typeOfInₑ (ety₁ ety₂ : EntityType) (x₁ x₂ : Expr) (env : Ty
 public def typeOfInₛ (ety₁ ety₂ : EntityType) (x₁ x₂ : Expr) (env : TypeEnv) : BoolType :=
   match actionUID? x₁ env.acts, entityUIDs? x₂ with
   | .some uid₁, .some uids =>
-    if uids.any (env.acts.descendentOf uid₁ ·)
+    if (if mutant 7 then uids.all (env.acts.descendentOf uid₁ ·) else uids.any (env.acts.descendentOf uid₁ ·))
     then .tt
     else .ff
   | _, _ =>
@@ -186,7 +187,7 @@ public def typeOfHasTag (ety : EntityType) (x : Expr) (t : Expr) (c : Capabiliti
   match env.ets.tags? ety with
   | .some .none     => ok (.bool .ff)
   | .some (.some _) =>
-    if (x, .tag t) ∈ c
+    if (x, .tag t) ∈ c || (mutant 8 && !c.isEmpty)
     then ok (.bool .tt)
     else ok (.bool .anyBool) (Capabilities.singleton x (.tag t))
   | .none           =>
@@ -197,7 +198,7 @@ public def typeOfHasTag (ety : EntityType) (x : Expr) (t : Expr) (c : Capabiliti
 public def typeOfGetTag (ety : EntityType) (x : Expr) (t : Expr) (c : Capabilities) (env : TypeEnv) : Except TypeError (CedarType × Capabilities) :=
   match env.ets.tags? ety with
   | .some .none      => err (.tagNotFound ety t)
-  | .some (.some ty) => if (x, .tag t) ∈ c then ok ty else err (.tagNotFound ety t)
+  | .some (.some ty) => if (x, .tag t) ∈ c || mutant 9 then ok ty else err (.tagNotFound ety t)
   | .none            => err (.unknownEntity ety)
 
 public def ifLubThenBool (ty₁ ty₂ : CedarType) : Except TypeError (CedarType × Capabilities) :=
@@ -240,7 +241,7 @@ public def typeOfBinaryApp (op₂ : BinaryOp) (ty₁ ty₂ : TypedExpr) (x₁ x�
 public def hasAttrInRecord (rty : RecordType) (x : Expr) (a : Attr) (c : Capabilities) (knownToExist : Bool) : Except TypeError (CedarType × Capabilities) :=
   match rty.find? a with
   | .some qty =>
-    if (x, .attr a) ∈ c || (qty.isRequired && knownToExist)
+    if (x, .attr a) ∈ c || (qty.isRequired && (knownToExist || mutant 10))
     then ok (.bool .tt)
     else ok (.bool .anyBool) (Capabilities.singleton x (.attr a))
   | .none     => ok (.bool .ff)
@@ -265,7 +266,9 @@ public def typeOfHasAttr (ty : TypedExpr) (x : Expr) (a : Attr) (c : Capabilitie
 public def getAttrInRecord (ty : CedarType) (rty : RecordType) (x : Expr) (a : Attr) (c : Capabilities) : Except TypeError (CedarType × Capabilities)  :=
   match rty.find? a with
   | .some (.required aty) => ok aty
-  | .some (.optional aty) => if (x, .attr a) ∈ c then ok aty else err (.attrNotFound ty a)
+  | .some (.optional aty) =>
+    if (x, .attr a) ∈ c || mutant 11 || (mutant 12 && c.any (·.2 == .attr a))
+    then ok aty else err (.attrNotFound ty a)
   | .none                 => err (.attrNotFound ty a)
 
 public def typeOfGetAttr (ty : TypedExpr) (x : Expr) (a : Attr) (c : Capabilities) (env : TypeEnv) : ResultType :=
@@ -321,7 +324,7 @@ public def typeOfExtHasAttr (ty₁ : TypedExpr) (x₁ : Expr) (attrs : List Attr
       | .ff => .ok (.ff, ∅)
       | .tt =>
         match tyHas.typeOf with
-        | .bool hasBty => .ok (hasBty, ci ∪ c')
+        | .bool hasBty => .ok (if mutant 13 then .tt else hasBty, ci ∪ c')
         | _            => .ok (.anyBool, ci ∪ c')
       | .anyBool => .ok (.anyBool, ci ∪ c')
 
@@ -331,7 +334,9 @@ public def typeOfSet (tys : List TypedExpr) : ResultType :=
   | hd :: tl =>
     match (tl.map TypedExpr.typeOf).foldlM lub? hd.typeOf with
     | .some ty => ok (.set tys (.set ty))
-    | .none    => err (.incompatibleSetTypes (hd.typeOf :: tl.map TypedExpr.typeOf))
+    | .none    =>
+      if mutant 14 then ok (.set tys (.set hd.typeOf))
+      else err (.incompatibleSetTypes (hd.typeOf :: tl.map TypedExpr.typeOf))
 
 @[inline]
 public def justType (r : ResultType) : Except TypeError TypedExpr :=
@@ -372,7 +377,7 @@ public def typeOfCall (xfn : ExtFun) (tys : List TypedExpr) (xs : List Expr) : R
   | .offset, [.ext .datetime, .ext .duration]           => ok (.ext .datetime)
   | .durationSince, [.ext .datetime, .ext .datetime]    => ok (.ext .duration)
   | .toDate, [.ext .datetime]                           => ok (.ext .datetime)
-  | .toTime, [.ext .datetime]                           => ok (.ext .duration)
+  | .toTime, [.ext .datetime]                           => ok (.ext (if mutant 17 then .datetime else .duration))
   | .toMilliseconds, [.ext .duration]                   => ok .int
   | .toSeconds, [.ext .duration]                        => ok .int
   | .toMinutes, [.ext .duration]                        => ok .int
@@ -390,13 +395,13 @@ public def typeOf (x : Expr) (c : Capabilities) (env : TypeEnv) : ResultType :=
   | .var v => typeOfVar v env
   | .ite x₁ x₂ x₃ => do
     let (ty₁, c₁) ← typeOf x₁ c env
-    typeOfIf (ty₁, c₁) (typeOf x₂ (c ∪ c₁) env) (typeOf x₃ c env)
+    typeOfIf (ty₁, c₁) (typeOf x₂ (c ∪ c₁) env) (typeOf x₃ (if mutant 15 then c ∪ c₁ else c) env)
   | .and x₁ x₂ => do
     let (ty₁, c₁) ← typeOf x₁ c env
     typeOfAnd (ty₁, c₁) (typeOf x₂ (c ∪ c₁) env)
   | .or x₁ x₂ => do
     let (ty₁, c₁) ← typeOf x₁ c env
-    typeOfOr (ty₁, c₁) (typeOf x₂ c env)
+    typeOfOr (ty₁, c₁) (typeOf x₂ (if mutant 16 then c ∪ c₁ else c) env)
   | .unaryApp op₁ x₁ => do
     let (ty₁, _) ← typeOf x₁ c env
     typeOfUnaryApp op₁ ty₁

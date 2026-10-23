@@ -20,6 +20,7 @@ public import Cedar.Spec.Entities
 public import Cedar.Spec.Expr
 public import Cedar.Spec.ExtFun
 public import Cedar.Spec.Request
+public import Cedar.Mutant
 
 /-! This file defines the semantics of Cedar operators and expressions. -/
 
@@ -44,11 +45,11 @@ public def apply₁ : UnaryOp → Value → Result Value
   | _, _                             => .error .typeError
 
 public def inₑ (uid₁ uid₂ : EntityUID) (es : Entities) : Bool :=
-  uid₁ == uid₂ || (es.ancestorsOrEmpty uid₁).contains uid₂
+  (uid₁ == uid₂ && !mutant 23) || (es.ancestorsOrEmpty uid₁).contains uid₂
 
 public def inₛ (uid : EntityUID) (vs : Set Value) (es : Entities) : Result Value := do
   let uids ← vs.mapOrErr Value.asEntityUID .typeError
-  .ok (uids.any (inₑ uid · es))
+  .ok (if mutant 24 then uids.all (inₑ uid · es) else uids.any (inₑ uid · es))
 
 public def hasTag (uid : EntityUID) (tag : String) (es : Entities) : Result Value :=
   .ok ((es.tagsOrEmpty uid).contains tag)
@@ -68,7 +69,8 @@ public def apply₂ (op₂ : BinaryOp) (v₁ v₂ : Value) (es : Entities) : Res
   | .add,    .prim (.int i), .prim (.int j)                => intOrErr (i.add? j)
   | .sub,    .prim (.int i), .prim (.int j)                => intOrErr (i.sub? j)
   | .mul,    .prim (.int i), .prim (.int j)                => intOrErr (i.mul? j)
-  | .contains,    .set vs₁, _                              => .ok (vs₁.contains v₂)
+  | .contains,    .set vs₁, _                              =>
+    if mutant 28 && vs₁.isEmpty then .error .typeError else .ok (vs₁.contains v₂)
   | .containsAll, .set vs₁, .set vs₂                       => .ok (vs₂.subset vs₁)
   | .containsAny, .set vs₁, .set vs₂                       => .ok (vs₁.intersects vs₂)
   | .mem, .prim (.entityUID uid₁), .prim (.entityUID uid₂) => .ok (inₑ uid₁ uid₂ es)
@@ -102,7 +104,7 @@ where
       | .ok r =>
         match r.find? a with
         | .some v₁ => loop v₁ as es
-        | .none => .ok false
+        | .none => .ok (mutant 25)
       | .error _ => .error .typeError
 
 public def bindAttr [Monad m] (a : Attr) (res : m α) : m (Attr × α) := do
@@ -119,13 +121,23 @@ public def evaluate (x : Expr) (req : Request) (es : Entities) : Result Value :=
     | .context       => .ok req.context
   | .ite x₁ x₂ x₃    => do
     let b ← (evaluate x₁ req es).as Bool
-    if b then evaluate x₂ req es else evaluate x₃ req es
+    if mutant 22 then do
+      let v₂ ← evaluate x₂ req es
+      let v₃ ← evaluate x₃ req es
+      .ok (if b then v₂ else v₃)
+    else if b then evaluate x₂ req es else evaluate x₃ req es
   | .and x₁ x₂       => do
     let b ← (evaluate x₁ req es).as Bool
-    if !b then .ok b else (evaluate x₂ req es).as Bool
+    if mutant 20 then do
+      let b₂ ← (evaluate x₂ req es).as Bool
+      .ok (b && b₂)
+    else if !b then .ok b else (evaluate x₂ req es).as Bool
   | .or x₁ x₂        => do
     let b ← (evaluate x₁ req es).as Bool
-    if b then .ok b else (evaluate x₂ req es).as Bool
+    if mutant 21 then do
+      let b₂ ← (evaluate x₂ req es).as Bool
+      .ok (b || b₂)
+    else if b then .ok b else (evaluate x₂ req es).as Bool
   | .unaryApp op₁ x₁ => do
     let v₁ ← evaluate x₁ req es
     apply₁ op₁ v₁
@@ -147,7 +159,7 @@ public def evaluate (x : Expr) (req : Request) (es : Entities) : Result Value :=
     .ok (Set.make vs)
   | .record axs      => do
     let avs ← axs.mapM₂ (fun ⟨(a₁, x₁), _⟩ => bindAttr a₁ (evaluate x₁ req es))
-    .ok (Map.make avs)
+    .ok (Map.make (if mutant 26 then avs.reverse else avs))
   | .call xfn xs     => do
     let vs ← xs.mapM₁ (fun ⟨x₁, _⟩ => evaluate x₁ req es)
     call xfn vs

@@ -17,6 +17,7 @@
 module
 
 public import Cedar.Spec.Value
+public import Cedar.Mutant
 
 /-! This file defines Cedar extension functions. -/
 
@@ -81,7 +82,8 @@ public def call : ExtFun → List Value → Result Value
   | .durationSince,
     [.ext (.datetime d₁), .ext (.datetime d₂)]  => res (d₁.durationSince d₂)
   | .toDate, [.ext (.datetime dt)]              => res (dt.toDate)
-  | .toTime, [.ext (.datetime dt)]              => .ok dt.toTime
+  | .toTime, [.ext (.datetime dt)]              =>
+    if mutant 27 then .ok (Value.ext (.datetime dt)) else .ok dt.toTime
   | .toMilliseconds, [.ext (.duration dur)]     => .ok dur.toMilliseconds
   | .toSeconds, [.ext (.duration dur)]          => .ok dur.toSeconds
   | .toMinutes, [.ext (.duration dur)]          => .ok dur.toMinutes
