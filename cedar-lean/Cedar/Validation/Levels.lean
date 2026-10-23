@@ -59,9 +59,9 @@ public def TypedExpr.checkEntityAccessLevel (tx : TypedExpr) (env : TypeEnv) (n 
   match tx, path with
   | .var _ _, _ => true
   | .lit (.entityUID euid) _, _ =>
-    euid == env.reqty.action
+    euid == env.reqty.action || mutant 39
   | .ite tx₁ tx₂ tx₃ _, _ =>
-    tx₁.checkLevel env nmax &&
+    (mutant 40 || tx₁.checkLevel env nmax) &&
     tx₂.checkEntityAccessLevel env n nmax path &&
     tx₃.checkEntityAccessLevel env n nmax path
   | .getAttr x₁ a _, _ =>
@@ -107,7 +107,7 @@ public def extHasAttrChainCost (env : TypeEnv) (ty : CedarType) : List Attr → 
         match rty.find? a with
         | .some qty =>
           match qty.getType with
-          | .entity nextEty => 1 + extHasAttrChainCost env (.entity nextEty) rest
+          | .entity nextEty => (if mutant 37 then 0 else 1) + extHasAttrChainCost env (.entity nextEty) rest
           | nextTy => extHasAttrChainCost env nextTy rest
         | .none => 0
       | .none => 0
