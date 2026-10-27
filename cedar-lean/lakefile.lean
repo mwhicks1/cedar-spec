@@ -30,7 +30,12 @@ lean_lib Cedar where
   -- SanitizerCoverage for Basalt's `basalt-fuzz`: only a C -> object flag, so it costs nothing
   -- unless an executable links Cedar, and it is what gives libFuzzer coverage of Cedar's evaluator
   -- and typechecker.
-  moreLeancArgs := #["-O1", "-fsanitize=fuzzer-no-link"]
+  -- `BASALT_NAT_HOOK` (set by Basalt's `fuzz-run/build.sh`) names a header to force-include, which
+  -- makes Lean `Nat` comparisons reach the comparison hook; unset, nothing is added.
+  moreLeancArgs := #["-O1", "-fsanitize=fuzzer-no-link"] ++
+    (match run_io (IO.getEnv "BASALT_NAT_HOOK") with
+     | some h => #["-include", h]
+     | none => #[])
 
 @[default_target]
 lean_lib SymCC where
